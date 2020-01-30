@@ -13,6 +13,7 @@ Swift Style Guide. v1.01
 * Code Organization
   * Protocol Conformance
   * Unused Code
+  * Switch
   * Minimal Imports
 * Spacing
 * Comments
@@ -38,7 +39,7 @@ Swift Style Guide. v1.01
 * Control Flow
   * Ternary Operator
 * Golden Path
-  * [Failing Guards
+  * Failing Guards
 * Semicolons
 * Parentheses
 * Multi-line String Literals
@@ -176,9 +177,24 @@ Use extensions to organize your code into logical blocks of functionality. Each 
 
 ### Protocol Conformance
 
-In particular, when adding protocol conformance to a model, prefer adding a separate extension for the protocol methods. This keeps the related methods grouped together with the protocol and can simplify instructions to add a protocol to a class with its associated methods.
+In particular, when adding protocol conformance to a model, prefer do not use a separate extension for the protocol methods. Use `// MARK: -` comment to keep the related methods grouped together with the protocol.
 
 **Preferred**:
+```swift
+class MyViewController: UIViewController, UITableViewDataSource, UIScrollViewDelegate {
+
+    ...
+
+    // MARK: - UITableViewDataSource
+    // table view data source methods
+
+    
+    // MARK: - UIScrollViewDelegate
+    // scroll view delegate methods
+}
+```
+
+**Not Preferred**:
 ```swift
 class MyViewController: UIViewController {
     // class stuff here
@@ -192,13 +208,6 @@ extension MyViewController: UITableViewDataSource {
 // MARK: - UIScrollViewDelegate
 extension MyViewController: UIScrollViewDelegate {
     // scroll view delegate methods
-}
-```
-
-**Not Preferred**:
-```swift
-class MyViewController: UIViewController, UITableViewDataSource, UIScrollViewDelegate {
-    // all methods
 }
 ```
 
@@ -237,6 +246,12 @@ override func tableView(_ tableView: UITableView, numberOfRowsInSection section:
 }
 
 ```
+### Switch
+
+When using a switch statement that has a finite set of possibilities (`enum`), do *NOT* include a `default` case. Instead, place unused cases at the bottom and use the `break` keyword to prevent execution.
+
+Prefer lists of possibilities (e.g. `case 1, 2, 3:`) to using the `fallthrough` keyword where possible).
+
 ### Minimal Imports
 
 Import only the modules a source file requires. For example, don't import `UIKit` when importing `Foundation` will suffice. Likewise, don't import `Foundation` if you must import `UIKit`.
@@ -271,7 +286,7 @@ var deviceModels: [String]
 ## Spacing
 
 * Indent using 4 spaces rather than tabs to conserve space and help prevent line wrapping.
-* Method braces and other braces (`if`/`else`/`switch`/`while` etc.) always open on the same line as the statement but close on a new line.
+* Method braces and other braces (`if`/`else`/`switch`/`while`/`guard` etc.) always open on the same line as the statement but close on a new line.
 
 **Preferred**:
 ```swift
@@ -473,6 +488,82 @@ func updateConstraints() -> () {
 typealias CompletionHandler = (result) -> ()
 ```
 
+
+
+#### Function Declarations with optional result
+
+Suppose a function `myFunction` is supposed to return a `String`, however, at some point it can run into an error. A common approach is to have this function return an optional `String?` where we return `nil` if something went wrong.
+
+Example:
+
+```swift
+func readFile(named filename: String) -> String? {
+    guard let file = openFile(named: filename) else {
+        return nil
+    }
+
+    let fileContents = file.read()
+    file.close()
+    return fileContents
+}
+
+func printSomeFile() {
+    let filename = "somefile.txt"
+    guard let fileContents = readFile(named: filename) else {
+        print("Unable to open file \(filename).")
+        return
+    }
+    print(fileContents)
+}
+```
+
+Instead, we should be using Swift's `try`/`catch` behavior when it is appropriate to know the reason for the failure.
+
+You can use a `struct` such as the following:
+
+```swift
+struct Error: Swift.Error {
+    public let file: StaticString
+    public let function: StaticString
+    public let line: UInt
+    public let message: String
+
+    public init(message: String, file: StaticString = #file, function: StaticString = #function, line: UInt = #line) {
+        self.file = file
+        self.function = function
+        self.line = line
+        self.message = message
+    }
+}
+```
+
+Example usage:
+
+```swift
+func readFile(named filename: String) throws -> String {
+    guard let file = openFile(named: filename) else {
+        throw Error(message: "Unable to open file named \(filename).")
+    }
+
+    let fileContents = file.read()
+    file.close()
+    return fileContents
+}
+
+func printSomeFile() {
+    do {
+        let fileContents = try readFile(named: filename)
+        print(fileContents)
+    } catch {
+        print(error)
+    }
+}
+```
+
+There are some exceptions in which it does make sense to use an optional as opposed to error handling. When the result should *semantically* potentially be `nil` as opposed to something going wrong while retrieving the result, it makes sense to return an optional instead of using error handling.
+
+In general, if a method can "fail", and the reason for the failure is not immediately obvious if using an optional return type, it probably makes sense for the method to throw an error.
+
 ## Function Calls
 
 Mirror the style of function declarations at call sites. Calls that fit on a single line should be written as such:
@@ -632,7 +723,10 @@ if let subview = subview, let volume = volume {
 
 // another example
 UIView.animate(withDuration: 2.0) { [weak self] in
-    guard let self = self else { return }
+    guard let self = self else { 
+      return
+    }
+                                   
     self.alpha = 1.0
 }
 ```
@@ -921,11 +1015,9 @@ When multiple optionals are unwrapped either with `guard` or `if let`, minimize 
 
 **Preferred**:
 ```swift
-guard 
-    let number1 = number1,
+guard let number1 = number1,
     let number2 = number2,
-    let number3 = number3 
-    else {
+    let number3 = number3 else {
         fatalError("impossible")
 }
 // do something with numbers
@@ -946,6 +1038,24 @@ if let number1 = number1 {
 } else {
     fatalError("impossible")
 }
+```
+
+### Guard statements with one line
+
+Do not use one-liners for `guard` statements
+
+##### Preferred:
+
+```swift
+guard let self = self else {
+    return
+}
+```
+
+##### Not Preferred:
+
+```Swift
+guard let self = self else { return }
 ```
 
 ### Failing Guards
